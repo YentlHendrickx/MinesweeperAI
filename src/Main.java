@@ -32,8 +32,9 @@ public class Main {
             return;
         }
 
-        // Move mouse and click on the first square!
-clickFirst();
+        calibratedImage();
+        // Move mouse and click on the first square! THE GAME BEGINS!
+        clickFirst();
     }
 
     static void clickFirst() throws Throwable {
@@ -45,7 +46,7 @@ clickFirst();
         Thread.sleep(200);
     }
 
-    // Click a squre
+    // Click a square
     static void clickPosition(int y, int x) throws Throwable {
         int mouseX = boardTopX + (int)(x*boardPixels);
         int mouseY = boardTopY + (int)(y*boardPixels);
@@ -61,7 +62,7 @@ clickFirst();
     static void calibrateParameters() {
         System.out.println("Calibration started");
 
-        BufferedImage fs = screenShotImage();
+        BufferedImage fs = fullScreenImage();
         assert fs != null;
         fs.createGraphics();
         Graphics2D graphics = (Graphics2D)fs.getGraphics();
@@ -129,7 +130,7 @@ clickFirst();
             }
         }
 
-        // Calculate boardwidth from total and boardheight
+        // Calculate board width from total and board height
         boardHeight = hh;
         if (total % (boardHeight - 1) == 0) {
             boardWidth = total / (boardHeight - 1) + 1;
@@ -153,9 +154,9 @@ clickFirst();
     // Control mouse
     static void moveMouse(int targetX, int targetY) throws Throwable {
         /// Move mouse smoothly to target
-        // Use some pythagorean math to calculate the distance
+        // Use some math to calculate the distance
         int distance = Math.max(Math.abs(targetX - mouseLocationX), Math.abs(targetY - mouseLocationY));
-        int steps = (distance / 4) /5 ;
+        int steps = (distance / 4) / 5 ;
 
         double stepX = (double)(targetX - mouseLocationX) / (double)steps;
         double stepY = (double)(targetY - mouseLocationY) / (double)steps;
@@ -177,7 +178,22 @@ clickFirst();
         return red + green + blue < 120;
     }
 
-    static BufferedImage screenShotImage() {
+    static BufferedImage calibratedImage() {
+        try {
+            Rectangle size = new Rectangle(boardTopX - boardWidth, boardTopY - boardHeight, (int)boardPixels * boardWidth, (int)boardPixels * boardHeight);
+
+            BufferedImage bufImage = robot.createScreenCapture(size);
+            File imageF = new File("screenshot2.png");
+            ImageIO.write(bufImage, "png", imageF);
+            return bufImage;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    static BufferedImage fullScreenImage() {
         try {
             Rectangle size = new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
             screenWidth = size.width;

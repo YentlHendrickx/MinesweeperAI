@@ -1,10 +1,7 @@
 import javax.imageio.ImageIO;
-import javax.sound.midi.Receiver;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.IOException;
-import java.nio.Buffer;
 
 public class Main {
     // Window settings
@@ -19,6 +16,13 @@ public class Main {
     static int mouseLocationX = screenWidth / 2;
     static int mouseLocationY = screenHeight /2;
 
+    // Representation of the entire board using a 2d array
+    // 1-8  = number of mines surrounding the square
+    // 0    = empty square
+    // -100 = mine square
+    // -1   = unopened square
+    static int[][] squareState = null;
+    static boolean[][] bombSquare = null;
 
     static Robot robot = null;
 
@@ -27,20 +31,207 @@ public class Main {
         calibrateParameters();
 
         // Check for failed calibration
-        if (boardWidth < 5 || boardWidth > 30 || boardHeight < 5 || boardHeight > 30) {
+        if (boardWidth < 8 || boardWidth > 30 || boardHeight < 8 || boardHeight > 30) {
             System.out.println("Failed calibration process!");
             return;
         }
 
-        calibratedImage();
+        // Init 2d array
+        squareState = new int[boardWidth][boardHeight];
+        bombSquare = new boolean[boardWidth][boardHeight];
+        // No mines to start with so set array
+        for (int x = 0; x < boardWidth; x++) for (int y = 0; y < boardHeight; y++) bombSquare[x][y] = false;
+
         // Move mouse and click on the first square! THE GAME BEGINS!
         clickFirst();
+
+        tryFlagging();
+
+        updateBoard();
+    }
+
+    static int squareState(int x, int y) {
+        if (x < 0 || y < 0 || x > boardWidth || y > boardHeight) return -10;
+        return squareState[x][y];
+    }
+
+    static void tryFlagging() throws Throwable {
+
+        for (int y = 0; y < boardHeight; y++) {
+            for (int x = 0; x < boardWidth; x++) {
+                if (squareState(x, y) >= 1) {
+                   int number = squareState[x][y];
+
+                   if (number == countFreeSquares(squareState, x, y)) {
+                       // FANCY MATH
+                       for (int yy = 0; yy < boardHeight; yy++) {
+                           for (int xx = 0; xx <boardWidth; xx++) {
+                               if (Math.abs(yy-y) <= 1 && Math.abs(xx-x) <= 1) {
+                                   if (squareState(xx, yy) == -1 && !bombSquare[xx][yy]) {
+                                       bombSquare[xx][yy] = true;
+                                       flagSquare(xx, yy);
+                                       System.out.println("FLAGGING SQURE!");
+                                   }
+                               }
+                           }
+                       }
+                   }
+                }
+            }
+        }
+    }
+
+    static int updateBoard() {
+        BufferedImage img = fullScreenImage();
+
+        for (int y = 0; y < boardHeight; y++) {
+            for (int x = 0; x < boardWidth; x++) {
+                int cell = getValue(img, x, y);
+                if (cell == -420) return cell;
+                squareState[x][y] = cell;
+
+                if (cell == -3 || bombSquare[x][y]) {
+                    bombSquare[x][y] = true;
+                    squareState[x][y] = -1000;
+                }
+            }
+        }
+        dumpBoard();
+        return -1;
+    }
+
+    static int getValue(BufferedImage img, int x, int y) {
+
+        int mouseX = boardTopX + (int)(x * boardPixels);
+        int mouseY = boardTopY + (int)(y * boardPixels);
+
+        // Look for a 15x15 area
+        int[] areaPixels = new int[255];
+        int cnt = 0;
+
+        for (int xx = mouseX-7; xx <= mouseX+7; xx++) {
+            for (int yy = mouseY-7; yy <= mouseY+7; yy++) {
+                areaPixels[cnt] = img.getRGB(xx, yy);
+                cnt++;
+            }
+        }
+
+        boolean isBlank = false;
+        boolean colorOfOne = false;
+        boolean relativelyBlank = true;
+
+        for (int rgb : areaPixels) {
+            int red = (rgb >> 16) & 0xFF;
+            int green = (rgb >> 8) & 0xFF;
+            int blue = rgb & 0xFF;
+
+            if (colDiff(red, green, blue, 110, 110, 110) < 20) return -1000;
+            if (colDiff(red, green, blue, 255, 0,0) < 30) return -3;
+            if (colDiff(red, green, blue, 65, 79, 188) < 10) colorOfOne = true;
+
+            if (blue > red && blue > green && colDiff(red, green, blue, 220, 220, 255) < 200) {
+                isBlank = true;
+            }
+
+            if (colDiff(red, green, blue, 167, 3, 5) < 20) return check3or7(areaPixels);
+            if (colDiff(red, green, blue, 29,103,4) < 20) return 2;
+            if (colDiff(red, green, blue, 0,0,138) < 20) return 4;
+            if (colDiff(red, green, blue, 124,1,3) < 20) return 5;
+            if (colDiff(red, green, blue, 7,122,131) < 20) return 6;
+        }
+
+        int rgb00 = areaPixels[0];
+        int red00 = (rgb00 >> 16) & 0xFF;
+        int green00 = (rgb00 >> 8) & 0xFF;
+        int blue00 = rgb00 & 0xFF;
+        for(int rgb : areaPixels){
+            int red = (rgb >> 16) & 0xFF;
+            int green = (rgb >> 8) & 0xFF;
+            int blue = rgb & 0xFF;
+            if(colDiff(red, green, blue, red00, green00, blue00) > 60){
+                relativelyBlank = false;
+                break;
+            }
+        }
+
+        if(colorOfOne && isBlank)
+                return 1;
+
+        if(isBlank && relativelyBlank)
+                return 0;
+
+        return -1;
+    }
+
+    static void dumpBoard() {
+        for (int y = 0; y < boardHeight; y++) {
+            for (int x = 0; x < boardWidth; x++) {
+                int number = squareState(x, y);
+                if (bombSquare[x][y]) System.out.print(".");
+                else if (number >= 1) System.out.print(number);
+                else if (number == 0) System.out.print(" ");
+                else System.out.print("#");
+            }
+            System.out.println();
+        }
+        System.out.println();
+    }
+
+    static int check3or7(int[] areaPixels) {
+        boolean[][] redx = new boolean[15][15];
+        for(int k=0; k<225; k++) {
+            int i = k % 15;
+            int j = k / 15;
+            int rgb = areaPixels[k];
+            int red = (rgb >> 16) & 0xFF;
+            int green = (rgb >> 8) & 0xFF;
+            int blue = rgb & 0xFF;
+
+            if (colDiff(red, green, blue, 170, 0, 0) < 100)
+                redx[i][j] = true;
+        }
+
+        for(int i = 0; i < 13; i++){
+            for(int j = 0; j < 13; j++){
+                if(!redx[i][j] && !redx[i][j+1] && !redx[i][j+2] && redx[i+1][j+1])
+                    return 3;
+            }
+        }
+        return 7;
+    }
+
+    static int colDiff(int r1, int g1, int b1, int r2, int g2, int b2) {
+        return Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+    }
+
+
+    static void flagSquare(int x, int y) throws Throwable {
+        int mouseX = boardTopX * (int)(x*boardPixels);
+        int mouseY = boardTopY * (int)(y*boardPixels);
+        moveMouse(mouseX, mouseY);
+
+        robot.mousePress(4);
+        Thread.sleep(5);
+        robot.mouseRelease(4);
+        Thread.sleep(5);
+    }
+
+    static int countFreeSquares(int[][] board, int x, int y) {
+        int free = 0;
+
+        if(squareState[x-1][y+1] == -1) free++;
+        if(squareState[x-1][y] == -1) free++;
+        if(squareState[x-1][y-1] == -1) free++;
+        if(squareState[x][y+1] == -1) free++;
+        if(squareState[x][y-1] == -1) free++;
+        if(squareState[x+1][y+1] == -1) free++;
+        if(squareState[x+1][y] == -1) free++;
+        if(squareState[x+1][y-1] == -1) free++;
+
+        return free;
     }
 
     static void clickFirst() throws Throwable {
-        // Check if it's the first square
-        robot.mouseMove(0,0 );
-        Thread.sleep(20);
         clickPosition(boardHeight / 2 - 1, boardWidth / 2 - 1);
         clickPosition(boardHeight / 2 - 1, boardWidth / 2 - 1);
         Thread.sleep(200);
@@ -58,7 +249,7 @@ public class Main {
         Thread.sleep(10);
     }
 
-    // Create screenshot and determine board position
+    // Create screenshot and determine board position (Inspired by luckyToilet)
     static void calibrateParameters() {
         System.out.println("Calibration started");
 

@@ -48,6 +48,12 @@ public class Main {
         tryFlagging();
 
         updateBoard();
+
+        for (int x = 0; x < 10; x++) {
+            if (System.in.read() != -1) {
+                updateBoard();
+            }
+        }
     }
 
     static int squareState(int x, int y) {
@@ -87,6 +93,7 @@ public class Main {
         for (int y = 0; y < boardHeight; y++) {
             for (int x = 0; x < boardWidth; x++) {
                 int cell = getValue(img, x, y);
+//                System.out.println("x: " + x + " Y: " + y + " status: "  +cell);
                 if (cell == -420) return cell;
                 squareState[x][y] = cell;
 
@@ -105,20 +112,20 @@ public class Main {
         int mouseX = boardTopX + (int)(x * boardPixels);
         int mouseY = boardTopY + (int)(y * boardPixels);
 
-        // Look for a 15x15 area
-        int[] areaPixels = new int[255];
+        // Look for a 13x13 area
+        int[] areaPixels = new int[169];
         int cnt = 0;
 
-        for (int xx = mouseX-7; xx <= mouseX+7; xx++) {
-            for (int yy = mouseY-7; yy <= mouseY+7; yy++) {
+        for (int xx = mouseX-6; xx <= mouseX+6; xx++) {
+            for (int yy = mouseY-6; yy <= mouseY+6; yy++) {
                 areaPixels[cnt] = img.getRGB(xx, yy);
                 cnt++;
             }
         }
 
-        boolean isBlank = false;
-        boolean colorOfOne = false;
-        boolean relativelyBlank = true;
+        boolean isFullBlank = false;
+        boolean isPartialBlank = false;
+        boolean flagAmbiguity = false;
 
         for (int rgb : areaPixels) {
             int red = (rgb >> 16) & 0xFF;
@@ -126,39 +133,53 @@ public class Main {
             int blue = rgb & 0xFF;
 
             if (colDiff(red, green, blue, 110, 110, 110) < 20) return -1000;
-            if (colDiff(red, green, blue, 255, 0,0) < 30) return -3;
-            if (colDiff(red, green, blue, 65, 79, 188) < 10) colorOfOne = true;
-
-            if (blue > red && blue > green && colDiff(red, green, blue, 220, 220, 255) < 200) {
-                isBlank = true;
+            if (colDiff(red, green, blue, 128, 0, 0) < 10) flagAmbiguity = true;
+            if (colDiff(red, green, blue, 192, 192, 192) < 10) {
+                isPartialBlank = true;
             }
 
-            if (colDiff(red, green, blue, 167, 3, 5) < 20) return check3or7(areaPixels);
-            if (colDiff(red, green, blue, 29,103,4) < 20) return 2;
+            if (colDiff(red, green, blue, 255, 0, 0) < 10) flagAmbiguity = true;
+            if (colDiff(red, green, blue, 0, 0, 255) < 20) return 1;
+            if (colDiff(red, green, blue, 0,128,0) < 20) return 2;
             if (colDiff(red, green, blue, 0,0,138) < 20) return 4;
-            if (colDiff(red, green, blue, 124,1,3) < 20) return 5;
-            if (colDiff(red, green, blue, 7,122,131) < 20) return 6;
+//            if (colDiff(red, green, blue, 124,1,3) < 30) return 5;
+            if (colDiff(red, green, blue, 7,122,131) < 30) return 6;
         }
 
-        int rgb00 = areaPixels[0];
-        int red00 = (rgb00 >> 16) & 0xFF;
-        int green00 = (rgb00 >> 8) & 0xFF;
-        int blue00 = rgb00 & 0xFF;
-        for(int rgb : areaPixels){
-            int red = (rgb >> 16) & 0xFF;
-            int green = (rgb >> 8) & 0xFF;
-            int blue = rgb & 0xFF;
-            if(colDiff(red, green, blue, red00, green00, blue00) > 60){
-                relativelyBlank = false;
-                break;
+        // Get average pixel values
+        int avg = 0;
+        int avgRed = 0;
+        if (flagAmbiguity || isPartialBlank) {
+            int r1 = 0;
+            int g1 = 0;
+            int b1 = 0;
+            for (int rgb : areaPixels) {
+                int red = (rgb >> 16) & 0xFF;
+                int green = (rgb >> 8) & 0xFF;
+                int blue = rgb & 0xFF;
+                r1 += red;
+                g1 +=green;
+                b1 +=blue;
+            }
+            avg = (r1 + g1 + b1) /3;
+        }
+        if (isPartialBlank) {
+            if (avg > 30000) {
+                isFullBlank = true;
             }
         }
 
-        if(colorOfOne && isBlank)
-                return 1;
+        if (flagAmbiguity) {
+            System.out.println(avg);
+            if (avg < 25000) {
+                return -3;
+            } else {
+                return 3;
+            }
+        }
 
-        if(isBlank && relativelyBlank)
-                return 0;
+        if(isFullBlank && isPartialBlank)
+            return 0;
 
         return -1;
     }

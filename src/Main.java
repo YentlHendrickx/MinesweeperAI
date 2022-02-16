@@ -2,6 +2,7 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.Random;
 
 public class Main {
     // Window settings
@@ -25,6 +26,7 @@ public class Main {
     static boolean[][] bombSquare = null;
 
     static Robot robot = null;
+    static Random random = new Random();
 
     public static void main(String[] args) throws Throwable{
         robot = new Robot();
@@ -36,47 +38,172 @@ public class Main {
             return;
         }
 
+        calibratedImage();
+
         // Init 2d array
         squareState = new int[boardWidth][boardHeight];
         bombSquare = new boolean[boardWidth][boardHeight];
-        // No mines to start with so set array
-        for (int x = 0; x < boardWidth; x++) for (int y = 0; y < boardHeight; y++) bombSquare[x][y] = false;
+        for (int i = 0; i < boardWidth; i++) for (int j = 0; j < boardHeight; j++) bombSquare[i][j] = false;
 
-        // Move mouse and click on the first square! THE GAME BEGINS!
+        // No mines to start with so set array
         clickFirst();
 
-        tryFlagging();
-
-        updateBoard();
-
-        for (int x = 0; x < 10; x++) {
-            if (System.in.read() != -1) {
-                updateBoard();
+        for (int g = 0; g < 200; g++) {
+            int status = updateBoard();
+            if (!checkConsistency()) {
+                robot.mouseMove(0,0);
+                status = updateBoard();
+                robot.mouseMove(mouseLocationX, mouseLocationY);
+                if (status == - 1000) exit();
+                continue;
             }
+            if (status == -1000) exit();
+                tryFlagging();
+            updateBoard();
+                makeMove();
         }
     }
 
+    public static void exit() {
+        System.exit(0);
+    }
+
+    static boolean checkConsistency(){
+        for (int y = 0; y<boardHeight; y++){
+            for (int x = 0; x < boardWidth; x++){
+
+                int freeSquares = countFreeSquares( x, y);
+                int numFlags = countMines(bombSquare, x, y);
+
+                if (squareState(x,y) == 0 && freeSquares > 0){
+                    return false;
+                }
+                if ((squareState(x,y) - numFlags) > 0 && freeSquares == 0){
+                    return false;
+                }
+
+            }
+        }
+
+        return true;
+    }
+
+
     static int squareState(int x, int y) {
-        if (x < 0 || y < 0 || x > boardWidth || y > boardHeight) return -10;
+        if (x < 0 || y < 0 || x > boardWidth - 1 || y > boardHeight - 1) return -10;
         return squareState[x][y];
     }
 
-    static void tryFlagging() throws Throwable {
+    static void makeMove() throws Throwable{
+        boolean success = false;
 
         for (int y = 0; y < boardHeight; y++) {
             for (int x = 0; x < boardWidth; x++) {
                 if (squareState(x, y) >= 1) {
-                   int number = squareState[x][y];
+                    // Count number of mines surrounding
+                    int num = squareState(x, y);
 
-                   if (number == countFreeSquares(squareState, x, y)) {
+                    int mineCnt = countMines(bombSquare, x, y);
+                    int freeSquares = countFreeSquares( x,y);
+
+                    // Click on non-mine square
+                    if (num == mineCnt && freeSquares > mineCnt) {
+                        success = true;
+
+                        // Chord
+                        if (freeSquares - mineCnt > 1) {
+                            chord(x, y);
+                            squareState[x][y] = 0;
+                            continue;
+                        }
+
+                        for (int yy = 0; yy < boardHeight; yy++) {
+                            for (int xx = 0; xx < boardWidth; xx++) {
+                                if (Math.abs(yy-y)<=1 && Math.abs(xx-x)<=1) {
+                                    if (squareState(xx, yy) == -1 && !bombSquare[xx][yy]) {
+                                        clickPosition(xx,yy);
+                                        squareState[xx][yy] = 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (success) return;
+        System.out.println("RANDOM GUESS");
+        randomGuess();
+    }
+
+    static void chord(int x, int y) throws  Throwable {
+        int mouseX = boardTopX + (int)(x*boardPixels);
+        int mouseY = boardTopY + (int)(y*boardPixels);
+        moveMouse(mouseX, mouseY);
+
+        robot.mousePress(4);
+        robot.mousePress(16);
+        Thread.sleep(5);
+        robot.mouseRelease(4);
+        robot.mouseRelease(16);
+        Thread.sleep(5);
+    }
+
+    static int countMines(boolean[][] flag, int x, int y) {
+        int mines = 0;
+
+        boolean upperEdge = false, lowerEdge = false, leftEdge = false, rightEdge = false;
+
+        if (x == 0) leftEdge = true;
+        if (x == boardWidth - 1) rightEdge = true;
+
+        if (y == 0) upperEdge = true;
+        if (y == boardHeight - 1) lowerEdge = true;
+
+        // Upper row
+        if (!upperEdge && !leftEdge && flag[x-1][y-1]) mines++;
+        if (!upperEdge && flag[x][y-1]) mines++;
+        if (!upperEdge && !rightEdge && flag[x+1][y-1]) mines++;
+        // Center row
+        if (!leftEdge && flag[x-1][y]) mines++;
+        if (!rightEdge && flag[x+1][y]) mines++;
+        // Lower row
+        if (!lowerEdge && !leftEdge && flag[x-1][y+1]) mines++;
+        if (!lowerEdge && flag[x][y+1]) mines++;
+        if (!lowerEdge && !rightEdge && flag[x+1][y+1]) mines++;
+
+        return mines;
+    }
+
+    static void randomGuess() throws Throwable {
+      while(true) {
+          int k = random.nextInt(boardWidth * boardHeight);
+          int x = k / boardWidth;
+          int y = k / boardHeight;
+          System.out.println(x + " " + y);
+
+          if (squareState(x, y) == -1 && !bombSquare[x][y]) {
+              clickPosition(x, y);
+              return;
+          }
+      }
+    }
+
+    static void tryFlagging() throws Throwable {
+        for (int y = 0; y < boardHeight; y++) {
+            for (int x = 0; x < boardWidth; x++) {
+                if (squareState(x, y) >= 1) {
+                   int number = squareState(x,y);
+
+                   if (number == countFreeSquares(x, y)) {
                        // FANCY MATH
                        for (int yy = 0; yy < boardHeight; yy++) {
                            for (int xx = 0; xx <boardWidth; xx++) {
                                if (Math.abs(yy-y) <= 1 && Math.abs(xx-x) <= 1) {
                                    if (squareState(xx, yy) == -1 && !bombSquare[xx][yy]) {
-                                       bombSquare[xx][yy] = true;
-                                       flagSquare(xx, yy);
-                                       System.out.println("FLAGGING SQURE!");
+                                           bombSquare[xx][yy] = true;
+                                           flagSquare(xx, yy);
+//                                           System.out.println("FLAGGING SQUARE!");
                                    }
                                }
                            }
@@ -93,13 +220,16 @@ public class Main {
         for (int y = 0; y < boardHeight; y++) {
             for (int x = 0; x < boardWidth; x++) {
                 int cell = getValue(img, x, y);
-//                System.out.println("x: " + x + " Y: " + y + " status: "  +cell);
-                if (cell == -420) return cell;
+
+                if (cell == -1000) return cell;
                 squareState[x][y] = cell;
 
                 if (cell == -3 || bombSquare[x][y]) {
                     bombSquare[x][y] = true;
-                    squareState[x][y] = -1000;
+                    squareState[x][y] = cell;
+                }
+                if (cell == -1) {
+                    bombSquare[x][y] = false;
                 }
             }
         }
@@ -125,6 +255,9 @@ public class Main {
 
         boolean isFullBlank = false;
         boolean isPartialBlank = false;
+        boolean checkFail = true;
+
+        // Ambiguity flag; 5, 3 and flag all have the same red tones incorporated
         boolean flagAmbiguity = false;
 
         for (int rgb : areaPixels) {
@@ -132,7 +265,7 @@ public class Main {
             int green = (rgb >> 8) & 0xFF;
             int blue = rgb & 0xFF;
 
-            if (colDiff(red, green, blue, 110, 110, 110) < 20) return -1000;
+//            if (colDiff(red, green, blue, 0, 0, 0) < 20) checkFail = true;
             if (colDiff(red, green, blue, 128, 0, 0) < 10) flagAmbiguity = true;
             if (colDiff(red, green, blue, 192, 192, 192) < 10) {
                 isPartialBlank = true;
@@ -142,14 +275,14 @@ public class Main {
             if (colDiff(red, green, blue, 0, 0, 255) < 20) return 1;
             if (colDiff(red, green, blue, 0,128,0) < 20) return 2;
             if (colDiff(red, green, blue, 0,0,138) < 20) return 4;
-//            if (colDiff(red, green, blue, 124,1,3) < 30) return 5;
+
+            if (colDiff(red, green, blue, 128,0,0) < 20) flagAmbiguity = true;
             if (colDiff(red, green, blue, 7,122,131) < 30) return 6;
         }
 
         // Get average pixel values
         int avg = 0;
-        int avgRed = 0;
-        if (flagAmbiguity || isPartialBlank) {
+        if (flagAmbiguity || isPartialBlank || checkFail) {
             int r1 = 0;
             int g1 = 0;
             int b1 = 0;
@@ -169,14 +302,24 @@ public class Main {
             }
         }
 
+        if (checkFail) {
+//            System.out.println(avg);
+            if (avg < 20000) {
+                return -1000;
+            }
+        }
+
         if (flagAmbiguity) {
-            System.out.println(avg);
+//            System.out.println(avg);
             if (avg < 25000) {
                 return -3;
+            } else if (avg < 27500) {
+                return 5;
             } else {
                 return 3;
             }
         }
+
 
         if(isFullBlank && isPartialBlank)
             return 0;
@@ -198,56 +341,33 @@ public class Main {
         System.out.println();
     }
 
-    static int check3or7(int[] areaPixels) {
-        boolean[][] redx = new boolean[15][15];
-        for(int k=0; k<225; k++) {
-            int i = k % 15;
-            int j = k / 15;
-            int rgb = areaPixels[k];
-            int red = (rgb >> 16) & 0xFF;
-            int green = (rgb >> 8) & 0xFF;
-            int blue = rgb & 0xFF;
-
-            if (colDiff(red, green, blue, 170, 0, 0) < 100)
-                redx[i][j] = true;
-        }
-
-        for(int i = 0; i < 13; i++){
-            for(int j = 0; j < 13; j++){
-                if(!redx[i][j] && !redx[i][j+1] && !redx[i][j+2] && redx[i+1][j+1])
-                    return 3;
-            }
-        }
-        return 7;
-    }
-
     static int colDiff(int r1, int g1, int b1, int r2, int g2, int b2) {
         return Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
     }
 
 
     static void flagSquare(int x, int y) throws Throwable {
-        int mouseX = boardTopX * (int)(x*boardPixels);
-        int mouseY = boardTopY * (int)(y*boardPixels);
+        int mouseX = boardTopX + (int)(x*boardPixels);
+        int mouseY = boardTopY + (int)(y*boardPixels);
         moveMouse(mouseX, mouseY);
-
+//System.out.println("moving to: " + mouseX + "," + mouseY);
         robot.mousePress(4);
         Thread.sleep(5);
         robot.mouseRelease(4);
         Thread.sleep(5);
     }
 
-    static int countFreeSquares(int[][] board, int x, int y) {
+    static int countFreeSquares(int x, int y) {
         int free = 0;
 
-        if(squareState[x-1][y+1] == -1) free++;
-        if(squareState[x-1][y] == -1) free++;
-        if(squareState[x-1][y-1] == -1) free++;
-        if(squareState[x][y+1] == -1) free++;
-        if(squareState[x][y-1] == -1) free++;
-        if(squareState[x+1][y+1] == -1) free++;
-        if(squareState[x+1][y] == -1) free++;
-        if(squareState[x+1][y-1] == -1) free++;
+        if(squareState(x-1,y+1) == -1) free++;
+        if(squareState(x-1, y) == -1) free++;
+        if(squareState(x-1, y-1) == -1) free++;
+        if(squareState(x, y+1) == -1) free++;
+        if(squareState(x, y-1) == -1) free++;
+        if(squareState(x+1, y+1) == -1) free++;
+        if(squareState(x+1, y) == -1) free++;
+        if(squareState(x+1, y-1) == -1) free++;
 
         return free;
     }
@@ -353,6 +473,7 @@ public class Main {
         // Calculate board position by taking average
         boardPixels = 0.5*((double)(lastX - firstX) / (double)(boardHeight - 2))
                 + 0.5*((double)(lastY - firstY) / (double)(boardHeight - 2));
+        boardPixels = 16;
 
         // Calculate first cell position
         int boardHalf = (int)boardPixels / 2;

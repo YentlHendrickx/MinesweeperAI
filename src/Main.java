@@ -48,7 +48,13 @@ public class Main {
         // No mines to start with so set array
         clickFirst();
 
-        for (int g = 0; g < 200; g++) {
+//        while (true) {
+//            updateBoard();
+//            if (System.in.read() > 0) {
+//                System.out.println("Next Iteration");
+//            }
+//        }
+        for (int g = 0; g < 20; g++) {
             int status = updateBoard();
             if (!checkConsistency()) {
                 robot.mouseMove(0,0);
@@ -60,7 +66,7 @@ public class Main {
             if (status == -1000) exit();
                 tryFlagging();
             updateBoard();
-                makeMove();
+            makeMove();
         }
     }
 
@@ -108,12 +114,14 @@ public class Main {
 
                     // Click on non-mine square
                     if (num == mineCnt && freeSquares > mineCnt) {
-                        success = true;
+//                        System.out.println("x: " + x + " y: " + y + " has: " + mineCnt + " mines and " + freeSquares + " free");
+
 
                         // Chord
                         if (freeSquares - mineCnt > 1) {
                             chord(x, y);
                             squareState[x][y] = 0;
+                            success = true;
                             continue;
                         }
 
@@ -121,8 +129,9 @@ public class Main {
                             for (int xx = 0; xx < boardWidth; xx++) {
                                 if (Math.abs(yy-y)<=1 && Math.abs(xx-x)<=1) {
                                     if (squareState(xx, yy) == -1 && !bombSquare[xx][yy]) {
-                                        clickPosition(xx,yy);
+                                        clickPosition(yy,xx);
                                         squareState[xx][yy] = 0;
+                                        success = true;
                                     }
                                 }
                             }
@@ -131,6 +140,7 @@ public class Main {
                 }
             }
         }
+//        System.out.println(success);
         if (success) return;
         System.out.println("RANDOM GUESS");
         randomGuess();
@@ -179,11 +189,12 @@ public class Main {
       while(true) {
           int k = random.nextInt(boardWidth * boardHeight);
           int x = k / boardWidth;
-          int y = k / boardHeight;
-          System.out.println(x + " " + y);
+          int y = k % boardWidth;
+
 
           if (squareState(x, y) == -1 && !bombSquare[x][y]) {
-              clickPosition(x, y);
+              System.out.println(x + " " + y);
+              clickPosition(y, x);
               return;
           }
       }
@@ -226,14 +237,15 @@ public class Main {
 
                 if (cell == -3 || bombSquare[x][y]) {
                     bombSquare[x][y] = true;
-                    squareState[x][y] = cell;
+                    squareState[x][y] = -1;
                 }
                 if (cell == -1) {
                     bombSquare[x][y] = false;
                 }
             }
         }
-        dumpBoard();
+//        dumpBoard();
+
         return -1;
     }
 
@@ -296,6 +308,10 @@ public class Main {
             }
             avg = (r1 + g1 + b1) /3;
         }
+//        if (flagAmbiguity) {
+//            System.out.println(avg);
+//        }
+
         if (isPartialBlank) {
             if (avg > 30000) {
                 isFullBlank = true;
@@ -319,7 +335,6 @@ public class Main {
                 return 3;
             }
         }
-
 
         if(isFullBlank && isPartialBlank)
             return 0;
@@ -387,7 +402,7 @@ public class Main {
         robot.mousePress(16);
         Thread.sleep(5);
         robot.mouseRelease(16);
-        Thread.sleep(10);
+        Thread.sleep(5);
     }
 
     // Create screenshot and determine board position (Inspired by luckyToilet)
@@ -471,8 +486,8 @@ public class Main {
         }
 
         // Calculate board position by taking average
-        boardPixels = 0.5*((double)(lastX - firstX) / (double)(boardHeight - 2))
-                + 0.5*((double)(lastY - firstY) / (double)(boardHeight - 2));
+//        boardPixels = 0.5*((double)(lastX - firstX) / (double)(boardHeight - 2))
+//                + 0.5*((double)(lastY - firstY) / (double)(boardHeight - 2));
         boardPixels = 16;
 
         // Calculate first cell position
@@ -489,7 +504,7 @@ public class Main {
         /// Move mouse smoothly to target
         // Use some math to calculate the distance
         int distance = Math.max(Math.abs(targetX - mouseLocationX), Math.abs(targetY - mouseLocationY));
-        int steps = (distance / 4) / 5 ;
+        int steps = (distance / 4) / 5;
 
         double stepX = (double)(targetX - mouseLocationX) / (double)steps;
         double stepY = (double)(targetY - mouseLocationY) / (double)steps;
